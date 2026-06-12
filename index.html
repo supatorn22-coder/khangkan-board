@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Board Generator — Khangkan Studio</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Inter:wght@400;500;600&family=Sarabun:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink:#1A1A1A; --accent:#C8B89A; --bg:#F7F7F5; --line:#E8E8E6;
+    --muted:#999; --ok:#5a9a2a; --err:#e05050;
+  }
+  *,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
+  body { background:var(--bg); font-family:'Inter','Sarabun',system-ui,sans-serif; color:var(--ink); min-height:100vh; }
+  a { color:#4285f4; text-decoration:none; }
+  button { cursor:pointer; border:none; font-family:inherit; }
+  input { font-family:inherit; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  @keyframes up { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:none; } }
+
+  header { height:52px; background:#fff; border-bottom:1px solid var(--line); padding:0 18px;
+    display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:100; }
+  .brand { display:flex; align-items:center; gap:9px; }
+  .brand-bar { width:3px; height:22px; background:var(--accent); border-radius:2px; }
+  .brand-name { font-family:'DM Serif Display',serif; font-size:16px; }
+  .badge { font-size:9px; color:#888; background:#F0F0EE; padding:3px 10px; border-radius:20px; }
+  .badge.ok { color:#3a7a18; background:#f0fae8; border:1px solid #c0e8a0; }
+
+  .page { max-width:520px; margin:36px auto; padding:0 20px; animation:up .4s ease; }
+  h1 { font-family:'DM Serif Display',serif; font-size:32px; line-height:1.12; margin-bottom:8px; }
+  h1 em { color:var(--accent); }
+  .sub { font-size:12px; color:var(--muted); line-height:1.7; margin-bottom:20px; }
+
+  .drop { border:1.5px dashed #D8D8D6; border-radius:10px; background:#FAFAF9; min-height:190px;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; cursor:pointer;
+    overflow:hidden; position:relative; transition:border-color .2s; }
+  .drop.has { border:1.5px solid var(--accent); background:#fff; }
+  .drop img { max-width:100%; max-height:260px; object-fit:contain; }
+  .drop .hint { position:absolute; bottom:8px; right:8px; font-size:9px; color:#888;
+    background:rgba(255,255,255,.92); border:1px solid var(--line); border-radius:3px; padding:2px 7px; }
+
+  .card { background:#fff; border:1px solid var(--line); border-radius:10px; padding:18px; margin-top:16px; }
+  .gemini-logo { width:26px; height:26px; border-radius:7px; flex-shrink:0;
+    background:linear-gradient(135deg,#4285f4,#ea4335,#fbbc04,#34a853);
+    display:flex; align-items:center; justify-content:center; font-size:13px; }
+  .keyrow { display:flex; gap:8px; margin-top:12px; }
+  .keyrow input { flex:1; border:1px solid var(--line); border-radius:6px; padding:10px 12px;
+    font-size:12px; outline:none; background:#FAFAF9; min-width:0; }
+  .btn { padding:10px 18px; background:var(--ink); color:#fff; border-radius:6px; font-size:12px; font-weight:500; }
+  .btn:disabled { background:#ccc; cursor:default; }
+  .btn-full { width:100%; padding:14px 0; border-radius:8px; font-size:13px; letter-spacing:.05em; margin-top:14px; }
+  .btn-ghost { background:#fff; color:#888; border:1px solid var(--line); }
+
+  .viewlist { margin-top:22px; display:grid; grid-template-columns:1fr 1fr; gap:6px 14px; }
+  .viewlist div { display:flex; align-items:center; gap:6px; font-size:11px; color:#999; }
+  .dot { width:4px; height:4px; border-radius:50%; background:var(--accent); flex-shrink:0; }
+
+  .center { display:flex; flex-dire-column; flex-direction:column; align-items:center; justify-content:center; min-height:60vh; }
+  .spinner { width:26px; height:26px; border:2.5px solid #EEE; border-top:2.5px solid var(--accent);
+    border-radius:50%; animation:spin 1s linear infinite; }
+
+  /* generating list */
+  .genlist { display:grid; grid-template-columns:1fr; gap:1px; background:var(--line); border-radius:8px; overflow:hidden; }
+  .genrow { background:#fff; padding:10px 13px; display:flex; align-items:center; gap:10px; }
+  .st { width:8px; height:8px; border-radius:50%; background:#e3e3e3; flex-shrink:0; transition:background .3s; }
+  .st.loading { background:var(--accent); } .st.done { background:var(--ok); } .st.error { background:var(--err); }
+  .genrow .nm { font-size:11px; font-weight:500; color:#aaa; flex:1; }
+  .genrow .nm.done { color:var(--ink); }
+  .thumb { width:46px; height:32px; object-fit:cover; border-radius:3px; border:1px solid var(--line); }
+  .mini-spin { width:12px; height:12px; border:1.5px solid #EEE; border-top:1.5px solid var(--accent);
+    border-radius:50%; animation:spin .8s linear infinite; }
+  .progress { height:3px; background:#EBEBEA; border-radius:2px; overflow:hidden; margin:8px 0 16px; }
+  .progress > div { height:100%; background:linear-gradient(90deg,#4285f4,var(--accent)); transition:width .6s ease; border-radius:2px; }
+
+  /* board */
+  .board-wrap { padding:16px; animation:up .5s; }
+  .board-head { display:flex; align-items:center; justify-content:space-between; gap:10px;
+    margin-bottom:12px; padding-bottom:12px; border-bottom:1px solid var(--line); }
+  .board-title { font-family:'DM Serif Display',serif; font-size:19px; border:none; background:transparent; outline:none; width:100%; max-width:240px; }
+  .board-grid { display:grid; grid-template-columns:1fr 1fr; gap:3px; background:#D0D0CC; border-radius:8px; overflow:hidden; }
+  .cell { background:#fff; display:flex; flex-direction:column; overflow:hidden; }
+  .cell-tag { padding:6px 11px; border-bottom:1px solid #EBEBEA; background:#FAFAF9; font-size:8px;
+    font-weight:700; letter-spacing:.12em; color:#aaa; text-transform:uppercase; display:flex; align-items:center; }
+  .cell-img { flex:1; background:#F4F4F2; display:flex; align-items:center; justify-content:center;
+    overflow:hidden; min-height:150px; position:relative; }
+  .cell-img img { width:100%; height:100%; object-fit:cover; display:block; }
+  .cell-lbl { padding:4px 11px; border-top:1px solid #EBEBEA; background:#FAFAF9; font-size:9px; color:#777; }
+  .retry-link { margin-left:auto; font-size:9px; color:var(--err); background:none; padding:0; }
+  .wide { grid-column:1 / 3; }
+  .dl { position:absolute; bottom:6px; right:6px; font-size:9px; background:rgba(255,255,255,.92);
+    border:1px solid var(--line); border-radius:3px; padding:2px 8px; color:#555; }
+  .info-cell { background:var(--ink); display:flex; flex-direction:column; justify-content:flex-end; padding:14px; min-height:150px; }
+  .footer-row { margin-top:12px; display:flex; justify-content:flex-end; gap:8px; }
+  .err-note { margin-top:12px; padding:10px 14px; background:#fff5f5; border:1px solid #f0c0c0;
+    border-radius:6px; font-size:11px; color:#a04040; line-height:1.6; display:none; }
+
+  @media (min-width:760px) {
+    .board-grid { grid-template-columns:1.5fr 1fr 1fr; }
+    .wide { grid-column:auto; }
+    .g-persp { grid-column:1; grid-row:1 / 3; }
+    .g-plan  { grid-column:2 / 4; grid-row:1; }
+    .g-iso   { grid-column:2; grid-row:2; }
+    .g-elev  { grid-column:3; grid-row:2; }
+    .g-blow  { grid-column:1; grid-row:3; }
+    .g-typ   { grid-column:2 / 4; grid-row:3; }
+    .g-mat   { grid-column:1 / 3; grid-row:4; }
+    .g-info  { grid-column:3; grid-row:4; }
+  }
+  @media print {
+    header, .footer-row, .dl, .retry-link { display:none !important; }
+    .board-wrap { padding:0; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="brand-bar"></div>
+    <span class="brand-name">Board Generator</span>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px">
+    <span class="badge" id="keyBadge">No API key</span>
+    <button class="btn btn-ghost" id="newBtn" style="display:none;padding:5px 12px;font-size:10px">New</button>
+  </div>
+</header>
+
+<!-- UPLOAD -->
+<div class="page" id="pageUpload">
+  <h1>Sketch →<br><em>Photorealistic Board.</em></h1>
+  <p class="sub">
+    อัปโหลด sketch → <strong>Gemini 2.5 Flash Image (Nano Banana)</strong> generate ภาพ realistic
+    ที่<strong>ตรงกับ design ใน sketch จริงๆ</strong> เพราะส่งภาพ sketch เข้า model โดยตรง
+  </p>
+
+  <div class="drop" id="drop">
+    <div id="dropEmpty" style="text-align:center;padding:26px">
+      <svg width="32" height="32" viewBox="0 0 36 36" fill="none" style="margin-bottom:11px">
+        <rect x="2" y="2" width="32" height="32" rx="6" stroke="#C8B89A" stroke-width="1.5"/>
+        <path d="M18 11v14M11 18h14" stroke="#C8B89A" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+      <div style="font-size:12px;color:#777"><strong style="color:#1A1A1A">Upload sketch</strong><br>
+      <span style="font-size:10px;color:#aaa">JPG หรือ PNG</span></div>
+    </div>
+    <img id="dropImg" style="display:none">
+    <div class="hint" id="dropHint" style="display:none">Tap to replace</div>
+  </div>
+  <input type="file" id="fileInput" accept="image/*" style="display:none">
+
+  <div class="card" id="keyCard">
+    <div style="display:flex;align-items:center;gap:9px">
+      <div class="gemini-logo">✦</div>
+      <div>
+        <div style="font-size:12px;font-weight:600">Gemini API Key</div>
+        <div style="font-size:10px;color:#aaa">
+          รับฟรีที่ <a href="https://aistudio.google.com/apikey" target="_blank">aistudio.google.com/apikey</a>
+        </div>
+      </div>
+    </div>
+    <div class="keyrow">
+      <input type="password" id="keyInput" placeholder="AIza…">
+      <button class="btn" id="keySave">Save</button>
+    </div>
+    <div style="margin-top:8px;font-size:10px;color:#ccc">Key เก็บในเครื่องคุณเท่านั้น (localStorage)</div>
+  </div>
+
+  <button class="btn btn-full" id="genBtn" style="display:none">Generate 7-View Photorealistic Board →</button>
+  <div class="err-note" id="uploadErr"></div>
+
+  <div class="viewlist" id="viewList"></div>
+</div>
+
+<!-- GENERATING -->
+<div class="page" id="pageGen" style="display:none">
+  <div style="font-size:10px;color:var(--accent);letter-spacing:.1em;text-transform:uppercase" id="genLabel">Generating — 0/7</div>
+  <div class="progress"><div id="progressBar" style="width:0%"></div></div>
+  <div class="genlist" id="genList"></div>
+  <div class="card" id="analysisCard" style="display:none">
+    <div style="font-size:9px;color:#4285f4;letter-spacing:.1em;text-transform:uppercase;margin-bottom:6px">Gemini Analysis</div>
+    <div style="font-size:12px;font-weight:500" id="anType"></div>
+    <div style="font-size:10px;color:#bbb;margin-top:6px;line-height:1.6;font-style:italic" id="anPrompt"></div>
+  </div>
+</div>
+
+<!-- BOARD -->
+<div class="board-wrap" id="pageBoard" style="display:none">
+  <div class="board-head">
+    <div style="min-width:0">
+      <div style="font-size:8px;color:var(--accent);letter-spacing:.12em;text-transform:uppercase;margin-bottom:3px">Presentation Board</div>
+      <input class="board-title" id="projName" value="Untitled Project">
+      <div style="font-size:10px;color:#aaa;margin-top:1px" id="boardSub"></div>
+    </div>
+    <img id="boardSketch" style="width:54px;height:40px;object-fit:cover;border-radius:4px;border:1px solid var(--line);flex-shrink:0">
+  </div>
+  <div class="board-grid" id="boardGrid"></div>
+  <div class="footer-row">
+    <button class="btn btn-ghost" onclick="location.reload()" style="font-size:11px;padding:8px 14px">New Board</button>
+    <button class="btn" onclick="window.print()" style="font-size:11px;padding:8px 18px">Export / Print</button>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════════
+//  Board Generator — Gemini 2.5 Flash Image (image-to-image from sketch)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const VIEWS = [
+  { id:"perspective", label:"Perspective View",   tag:"01 — PERSPECTIVE",
+    prompt:"Transform this landscape architecture sketch into a PHOTOREALISTIC eye-level perspective render of the same design. Keep the exact layout, structures, and elements from the sketch. Golden hour cinematic lighting, lush realistic vegetation, realistic materials and textures, professional architectural CGI quality, 8K detail. No text or watermark." },
+  { id:"plan", label:"Site Plan", tag:"02 — PLAN",
+    prompt:"Convert this landscape architecture sketch into a professional TOP-DOWN SITE PLAN drawing of the same design. Keep the exact layout from the sketch. Clean technical illustration style: green planting zones, blue water, beige paths, trees as circles with shadows, building footprint, north arrow, scale bar, white background. No text labels or watermark." },
+  { id:"isometric", label:"Isometric View", tag:"03 — ISOMETRIC",
+    prompt:"Convert this landscape architecture sketch into a beautiful ISOMETRIC 45-degree axonometric illustration of the same design. Keep the exact layout and elements from the sketch. Clean professional architectural illustration, vibrant natural colors, crisp shadows. No text or watermark." },
+  { id:"elevation", label:"Elevation", tag:"04 — ELEVATION",
+    prompt:"Convert this landscape architecture sketch into a precise ARCHITECTURAL ELEVATION drawing (orthographic front view) of the same design. White background, clean technical linework, trees and plants in elevation, structures with correct proportions, human figure for scale, minimal color. No text or watermark." },
+  { id:"blowup", label:"Blowup Detail", tag:"05 — BLOWUP DETAIL",
+    prompt:"Based on this landscape design sketch, create a detailed architectural BLOWUP DETAIL drawing showing a planting/construction cross-section detail relevant to this design: soil layers, drainage, plant roots, paving edge or structural connection. Technical drawing with annotation leader lines on white background. Professional construction detail quality." },
+  { id:"typical", label:"Typical Section", tag:"06 — TYPICAL DETAIL",
+    prompt:"Based on this landscape design sketch, create a TYPICAL CROSS-SECTION drawing cutting through this design: soil profile layers, paving build-up, planting zones with roots, structural footings with hatching. Precise technical linework on white background, professional landscape engineering section." },
+  { id:"materials", label:"Materials & Palette", tag:"07 — MATERIALS",
+    prompt:"Based on this landscape design sketch, create an elegant MATERIALS & FINISHES board showing the actual materials visible in this design: photographed material swatches arranged in a clean flat-lay grid on white background — stone, wood, concrete, plants, water. Professional architectural material palette presentation. No text or watermark." },
+];
+
+// Model fallback chain — newest/best first
+const IMAGE_MODELS = [
+  "gemini-2.5-flash-image",
+  "gemini-2.5-flash-image-preview",
+  "gemini-2.0-flash-preview-image-generation",
+];
+const TEXT_MODEL = "gemini-2.5-flash";
+const API = "https://generativelanguage.googleapis.com/v1beta/models";
+
+// ── State ──────────────────────────────────────────────────────────────────────
+let apiKey   = localStorage.getItem("gemini_key") || "";
+let sketchB64 = null, sketchMime = null, sketchDataUrl = null;
+let analysis = null;
+let images = {};      // viewId → dataUrl
+let statuses = {};    // viewId → waiting|loading|done|error
+let errors = {};
+let workingModel = null;  // remember first model that works
+
+// ── Elements ───────────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+
+// ── Init ───────────────────────────────────────────────────────────────────────
+function init() {
+  // View list
+  $("viewList").innerHTML = VIEWS.map(v =>
+    `<div><span class="dot"></span>${v.label}</div>`).join("");
+  // Key state
+  if (apiKey) { $("keyInput").value = apiKey; setKeyBadge(true); collapseKeyCard(); }
+  updateGenBtn();
+
+  $("drop").onclick = () => $("fileInput").click();
+  $("drop").ondragover = e => e.preventDefault();
+  $("drop").ondrop = e => { e.preventDefault(); handleFile(e.dataTransfer.files[0]); };
+  $("fileInput").onchange = e => handleFile(e.target.files[0]);
+  $("keySave").onclick = saveKey;
+  $("keyInput").onkeydown = e => { if (e.key === "Enter") saveKey(); };
+  $("genBtn").onclick = startGenerate;
+  $("newBtn").onclick = () => location.reload();
+}
+
+function setKeyBadge(ok) {
+  const b = $("keyBadge");
+  b.textContent = ok ? "Gemini ready" : "No API key";
+  b.className = "badge" + (ok ? " ok" : "");
+}
+function collapseKeyCard() {
+  $("keyCard").innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <div style="display:flex;align-items:center;gap:9px">
+        <div class="gemini-logo">✦</div>
+        <div style="font-size:12px;font-weight:500">Gemini API key saved</div>
+      </div>
+      <button class="btn btn-ghost" style="font-size:10px;padding:5px 10px"
+        onclick="localStorage.removeItem('gemini_key');location.reload()">Change</button>
+    </div>`;
+}
+function saveKey() {
+  const k = $("keyInput").value.trim();
+  if (!k) return;
+  apiKey = k;
+  localStorage.setItem("gemini_key", k);
+  setKeyBadge(true); collapseKeyCard(); updateGenBtn();
+}
+function handleFile(file) {
+  if (!file || !file.type.startsWith("image/")) return;
+  sketchMime = file.type;
+  const r = new FileReader();
+  r.onload = e => {
+    sketchDataUrl = e.target.result;
+    sketchB64 = sketchDataUrl.split(",")[1];
+    $("dropImg").src = sketchDataUrl;
+    $("dropImg").style.display = "block";
+    $("dropEmpty").style.display = "none";
+    $("dropHint").style.display = "block";
+    $("drop").classList.add("has");
+    updateGenBtn();
+  };
+  r.readAsDataURL(file);
+}
+function updateGenBtn() {
+  $("genBtn").style.display = (sketchB64 && apiKey) ? "block" : "none";
+}
+
+// ── Gemini calls ───────────────────────────────────────────────────────────────
+async function geminiAnalyze() {
+  try {
+    const r = await fetch(`${API}/${TEXT_MODEL}:generateContent?key=${apiKey}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{
+          role: "user",
+          parts: [
+            { inlineData: { mimeType: sketchMime, data: sketchB64 } },
+            { text: `Analyze this landscape architecture sketch. Return ONLY compact JSON, no markdown:
+{"projectType":"...","style":"...","mood":"...","summary":"one sentence describing this design"}` },
+          ],
+        }],
+        generationConfig: { temperature: 0.2, maxOutputTokens: 300 },
+      }),
+    });
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      throw new Error(d?.error?.message || `HTTP ${r.status}`);
+    }
+    const d = await r.json();
+    const txt = d?.candidates?.[0]?.content?.parts?.map(p => p.text || "").join("") || "";
+    const m = txt.match(/\{[\s\S]*\}/);
+    return m ? JSON.parse(m[0]) : null;
+  } catch (e) {
+    // Fallback for older accounts that don't have 2.5 yet
+    if (String(e.message).includes("not found") || String(e.message).includes("NOT_FOUND")) {
+      return await geminiAnalyzeWith("gemini-2.0-flash");
+    }
+    throw e;
+  }
+}
+async function geminiAnalyzeWith(model) {
+  const r = await fetch(`${API}/${model}:generateContent?key=${apiKey}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ role: "user", parts: [
+        { inlineData: { mimeType: sketchMime, data: sketchB64 } },
+        { text: `Analyze this landscape sketch. Return ONLY JSON: {"projectType":"...","style":"...","mood":"...","summary":"..."}` },
+      ]}],
+      generationConfig: { temperature: 0.2, maxOutputTokens: 300 },
+    }),
+  });
+  if (!r.ok) return null;
+  const d = await r.json();
+  const txt = d?.candidates?.[0]?.content?.parts?.map(p => p.text || "").join("") || "";
+  const m = txt.match(/\{[\s\S]*\}/);
+  return m ? JSON.parse(m[0]) : null;
+}
+
+async function geminiGenerateImage(view) {
+  const models = workingModel ? [workingModel, ...IMAGE_MODELS.filter(m => m !== workingModel)] : IMAGE_MODELS;
+  let lastErr = "";
+  for (const model of models) {
+    try {
+      const r = await fetch(`${API}/${model}:generateContent?key=${apiKey}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{
+            role: "user",
+            parts: [
+              { inlineData: { mimeType: sketchMime, data: sketchB64 } },   // ← sketch as input!
+              { text: view.prompt },
+            ],
+          }],
+          generationConfig: { responseModalities: ["TEXT", "IMAGE"] },
+        }),
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        lastErr = d?.error?.message || `HTTP ${r.status}`;
+        // invalid key → stop everything
+        if (lastErr.includes("API key not valid")) throw new Error("KEY_INVALID");
+        continue; // try next model
+      }
+      const parts = d?.candidates?.[0]?.content?.parts || [];
+      const img = parts.find(p => p.inlineData?.mimeType?.startsWith("image/"));
+      if (img) {
+        workingModel = model;
+        return `data:${img.inlineData.mimeType};base64,${img.inlineData.data}`;
+      }
+      lastErr = "Model returned no image";
+    } catch (e) {
+      if (e.message === "KEY_INVALID") throw new Error("API key ไม่ถูกต้อง — ตรวจสอบที่ aistudio.google.com/apikey");
+      lastErr = e.message;
+    }
+  }
+  throw new Error(lastErr || "Generation failed");
+}
+
+// ── Flow ───────────────────────────────────────────────────────────────────────
+async function startGenerate() {
+  $("pageUpload").style.display = "none";
+  $("pageGen").style.display = "block";
+  $("newBtn").style.display = "block";
+  VIEWS.forEach(v => { statuses[v.id] = "waiting"; });
+  renderGenList();
+
+  // Analyze (non-blocking failure)
+  try {
+    analysis = await geminiAnalyze();
+    if (analysis) {
+      $("analysisCard").style.display = "block";
+      $("anType").textContent = `${analysis.projectType || ""} · ${analysis.style || ""}`;
+      $("anPrompt").textContent = `"${analysis.summary || ""}"`;
+    }
+  } catch (e) {
+    if (String(e.message).includes("API key")) {
+      alert(e.message); location.reload(); return;
+    }
+  }
+
+  // Generate sequentially
+  for (const view of VIEWS) {
+    statuses[view.id] = "loading"; renderGenList();
+    try {
+      images[view.id] = await geminiGenerateImage(view);
+      statuses[view.id] = "done";
+    } catch (e) {
+      errors[view.id] = e.message;
+      statuses[view.id] = "error";
+      if (String(e.message).includes("API key")) { alert(e.message); location.reload(); return; }
+    }
+    renderGenList();
+  }
+  showBoard();
+}
+
+function renderGenList() {
+  const done = Object.values(statuses).filter(s => s === "done" || s === "error").length;
+  $("genLabel").textContent = `Generating — ${done}/${VIEWS.length}` + (workingModel ? `  ·  ${workingModel}` : "");
+  $("progressBar").style.width = Math.round(done / VIEWS.length * 100) + "%";
+  $("genList").innerHTML = VIEWS.map(v => `
+    <div class="genrow">
+      <div class="st ${statuses[v.id] || ""}"></div>
+      <div class="nm ${statuses[v.id] === "done" ? "done" : ""}">${v.label}</div>
+      ${images[v.id] ? `<img class="thumb" src="${images[v.id]}">`
+        : statuses[v.id] === "loading" ? `<div class="mini-spin"></div>`
+        : statuses[v.id] === "error" ? `<span style="font-size:9px;color:var(--err)">${(errors[v.id]||"").slice(0,40)}</span>`
+        : ""}
+    </div>`).join("");
+}
+
+function showBoard() {
+  $("pageGen").style.display = "none";
+  $("pageBoard").style.display = "block";
+  $("boardSketch").src = sketchDataUrl;
+  if (analysis) $("boardSub").textContent = `${analysis.projectType || ""} · ${analysis.style || ""}`;
+
+  const gridClasses = { perspective:"g-persp", plan:"g-plan", isometric:"g-iso",
+    elevation:"g-elev", blowup:"g-blow", typical:"g-typ", materials:"g-mat" };
+
+  $("boardGrid").innerHTML = VIEWS.map(v => `
+    <div class="cell ${gridClasses[v.id]} ${["plan","typical","materials"].includes(v.id) ? "wide" : ""}">
+      <div class="cell-tag">${v.tag}
+        ${statuses[v.id] === "error" ? `<button class="retry-link" onclick="retryView('${v.id}')">⟳ retry</button>` : ""}
+      </div>
+      <div class="cell-img" id="img-${v.id}">
+        ${images[v.id]
+          ? `<img src="${images[v.id]}"><a class="dl" href="${images[v.id]}" download="${v.id}.png">↓ save</a>`
+          : `<div style="font-size:10px;color:#bbb;padding:16px;text-align:center">${(errors[v.id]||"failed").slice(0,80)}<br><span style="color:var(--accent)">tap ⟳ retry above</span></div>`}
+      </div>
+      <div class="cell-lbl">${v.label}</div>
+    </div>`).join("") + `
+    <div class="info-cell g-info">
+      <div style="width:2px;height:15px;background:var(--accent);border-radius:2px;margin-bottom:9px"></div>
+      <div style="font-family:'DM Serif Display',serif;font-size:13px;color:#fff;line-height:1.3;margin-bottom:5px" id="infoName">Untitled Project</div>
+      <div style="font-size:8px;color:var(--accent);margin-bottom:2px">${analysis?.projectType || "Landscape Design"}</div>
+      <div style="font-size:8px;color:#555">${analysis?.style || ""}</div>
+      <div style="margin-top:9px;font-size:7px;color:#333">Khangkan Studio · ${new Date().getFullYear()}</div>
+    </div>`;
+
+  $("projName").oninput = e => { $("infoName").textContent = e.target.value; };
+  $("infoName").textContent = $("projName").value;
+}
+
+async function retryView(viewId) {
+  const view = VIEWS.find(v => v.id === viewId);
+  const cell = $("img-" + viewId);
+  cell.innerHTML = `<div class="spinner" style="width:20px;height:20px;border-width:2px"></div>`;
+  try {
+    images[viewId] = await geminiGenerateImage(view);
+    statuses[viewId] = "done";
+  } catch (e) {
+    errors[viewId] = e.message; statuses[viewId] = "error";
+  }
+  showBoard();
+}
+
+init();
+</script>
+</body>
+</html>
