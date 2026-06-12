@@ -221,11 +221,11 @@ const VIEWS = [
     prompt:"Based on this landscape design sketch, create an elegant MATERIALS & FINISHES board showing the actual materials visible in this design: photographed material swatches arranged in a clean flat-lay grid on white background — stone, wood, concrete, plants, water. Professional architectural material palette presentation. No text or watermark." },
 ];
 
-// Model fallback chain — newest/best first
+// Model fallback chain — newest/best first (updated June 2026)
 const IMAGE_MODELS = [
-  "gemini-2.5-flash-image",
-  "gemini-2.5-flash-image-preview",
-  "gemini-2.0-flash-preview-image-generation",
+  "gemini-3.1-flash-image",   // Nano Banana 2 — fast, high quality
+  "gemini-2.5-flash-image",   // Nano Banana — stable
+  "gemini-3-pro-image",       // Nano Banana Pro — highest fidelity
 ];
 const TEXT_MODEL = "gemini-2.5-flash";
 const API = "https://generativelanguage.googleapis.com/v1beta/models";
@@ -358,7 +358,24 @@ async function geminiAnalyzeWith(model) {
 }
 
 async function geminiGenerateImage(view) {
-  const models = workingModel ? [workingModel, ...IMAGE_MODELS.filter(m => m !== workingModel)] : IMAGE_MODELS;
+  // Discover available image models from the API once (robust against future renames)
+  if (!window.__discoveredModels) {
+    try {
+      const r = await fetch(`${API}?key=${apiKey}&pageSize=200`);
+      if (r.ok) {
+        const d = await r.json();
+        const found = (d.models || [])
+          .filter(m => m.name.includes("image") &&
+                       (m.supportedGenerationMethods || []).includes("generateContent"))
+          .map(m => m.name.replace("models/", ""));
+        if (found.length) window.__discoveredModels = found;
+      }
+    } catch {}
+    if (!window.__discoveredModels) window.__discoveredModels = [];
+  }
+  // Merge: known-good list first, then any newly discovered models
+  const pool = [...IMAGE_MODELS, ...window.__discoveredModels.filter(m => !IMAGE_MODELS.includes(m))];
+  const models = workingModel ? [workingModel, ...pool.filter(m => m !== workingModel)] : pool;
   let lastErr = "";
   for (const model of models) {
     try {
