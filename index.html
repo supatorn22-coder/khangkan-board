@@ -234,7 +234,8 @@ const TEXT_MODEL = "gemini-2.5-flash";
 const API = "https://generativelanguage.googleapis.com/v1beta/models";
 
 // ── State ──────────────────────────────────────────────────────────────────────
-let apiKey   = localStorage.getItem("gemini_key") || "";
+let apiKey = "";
+try { apiKey = localStorage.getItem("gemini_key") || ""; } catch {}
 let sketchB64 = null, sketchMime = null, sketchDataUrl = null;
 let analysis = null;
 let images = {};      // viewId → dataUrl
@@ -251,19 +252,21 @@ function init() {
   // View list
   $("viewList").innerHTML = VIEWS.map(v =>
     `<div><span class="dot"></span>${v.label}</div>`).join("");
-  // Key state
-  if (apiKey) { $("keyInput").value = apiKey; setKeyBadge(true); collapseKeyCard(); }
-  updateGenBtn();
 
+  // Attach ALL handlers first (before any DOM replacement)
   $("drop").onclick = () => $("fileInput").click();
   $("drop").ondragover = e => e.preventDefault();
   $("drop").ondrop = e => { e.preventDefault(); handleFile(e.dataTransfer.files[0]); };
   $("fileInput").onchange = e => handleFile(e.target.files[0]);
-  $("keySave").onclick = saveKey;
-  $("keyInput").onkeydown = e => { if (e.key === "Enter") saveKey(); };
+  if ($("keySave")) $("keySave").onclick = saveKey;
+  if ($("keyInput")) $("keyInput").onkeydown = e => { if (e.key === "Enter") saveKey(); };
   $("genBtn").onclick = startGenerate;
   $("manualBtn").onclick = startManual;
   $("newBtn").onclick = () => location.reload();
+
+  // Key state LAST (collapseKeyCard replaces keyCard DOM)
+  if (apiKey) { if ($("keyInput")) $("keyInput").value = apiKey; setKeyBadge(true); collapseKeyCard(); }
+  updateGenBtn();
 }
 
 function setKeyBadge(ok) {
@@ -279,14 +282,14 @@ function collapseKeyCard() {
         <div style="font-size:12px;font-weight:500">Gemini API key saved</div>
       </div>
       <button class="btn btn-ghost" style="font-size:10px;padding:5px 10px"
-        onclick="localStorage.removeItem('gemini_key');location.reload()">Change</button>
+        onclick="try{localStorage.removeItem('gemini_key')}catch(e){};location.reload()">Change</button>
     </div>`;
 }
 function saveKey() {
   const k = $("keyInput").value.trim();
   if (!k) return;
   apiKey = k;
-  localStorage.setItem("gemini_key", k);
+  try { localStorage.setItem("gemini_key", k); } catch {}
   setKeyBadge(true); collapseKeyCard(); updateGenBtn();
 }
 function handleFile(file) {
