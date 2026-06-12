@@ -398,6 +398,19 @@ async function geminiGenerateImage(view) {
         lastErr = d?.error?.message || `HTTP ${r.status}`;
         // invalid key → stop everything
         if (lastErr.includes("API key not valid")) throw new Error("KEY_INVALID");
+        // 429 quota → wait the time Google tells us, then retry same model (max 2 retries)
+        if (r.status === 429) {
+          const retryInfo = (d?.error?.details || []).find(x => x["@type"]?.includes("RetryInfo"));
+          let waitSec = 30;
+          if (retryInfo?.retryDelay) waitSec = Math.min(parseInt(retryInfo.retryDelay) || 30, 65);
+          const retries = (window.__r429 = window.__r429 || {});
+          retries[model] = (retries[model] || 0) + 1;
+          if (retries[model] <= 2) {
+            await showWait(view, waitSec);
+            return await geminiGenerateImage(view);   // retry from the top
+          }
+          continue; // give up on this model, try next
+        }
         continue; // try next model
       }
       const parts = d?.candidates?.[0]?.content?.parts || [];
@@ -413,6 +426,18 @@ async function geminiGenerateImage(view) {
     }
   }
   throw new Error(lastErr || "Generation failed");
+}
+
+// Countdown shown in the generating list while waiting out a rate limit
+async function showWait(view, sec) {
+  for (let s = sec; s > 0; s--) {
+    const row = [...document.querySelectorAll(".genrow")].find(r => r.textContent.includes(view.label));
+    if (row) {
+      const nm = row.querySelector(".nm");
+      if (nm) nm.innerHTML = `${view.label} <span style="color:#d09030;font-size:9px">· รอโควต้า ${s}s</span>`;
+    }
+    await new Promise(res => setTimeout(res, 1000));
+  }
 }
 
 // ── Flow ───────────────────────────────────────────────────────────────────────
@@ -437,8 +462,12 @@ async function startGenerate() {
     }
   }
 
-  // Generate sequentially
+  // Generate sequentially with spacing (free tier มี requests-per-minute ต่ำ)
+  let first = true;
   for (const view of VIEWS) {
+    if (!first) await new Promise(res => setTimeout(res, 8000)); // เว้น 8 วิ ระหว่างภาพ
+    first = false;
+    window.__r429 = {};  // reset retry counter per view
     statuses[view.id] = "loading"; renderGenList();
     try {
       images[view.id] = await geminiGenerateImage(view);
