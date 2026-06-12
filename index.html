@@ -165,6 +165,9 @@
   </div>
 
   <button class="btn btn-full" id="genBtn" style="display:none">Generate 7-View Photorealistic Board →</button>
+  <button class="btn btn-full btn-ghost" id="manualBtn" style="display:none">
+    ใช้ Gemini Pro ที่มี — โหมด Manual (ไม่ใช้ API key)
+  </button>
   <div class="err-note" id="uploadErr"></div>
 
   <div class="viewlist" id="viewList"></div>
@@ -238,6 +241,7 @@ let images = {};      // viewId → dataUrl
 let statuses = {};    // viewId → waiting|loading|done|error
 let errors = {};
 let workingModel = null;  // remember first model that works
+let manualMode = false;   // manual mode: copy prompt → Gemini app → upload back
 
 // ── Elements ───────────────────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
@@ -258,6 +262,7 @@ function init() {
   $("keySave").onclick = saveKey;
   $("keyInput").onkeydown = e => { if (e.key === "Enter") saveKey(); };
   $("genBtn").onclick = startGenerate;
+  $("manualBtn").onclick = startManual;
   $("newBtn").onclick = () => location.reload();
 }
 
@@ -302,6 +307,7 @@ function handleFile(file) {
 }
 function updateGenBtn() {
   $("genBtn").style.display = (sketchB64 && apiKey) ? "block" : "none";
+  $("manualBtn").style.display = sketchB64 ? "block" : "none";
 }
 
 // ── Gemini calls ───────────────────────────────────────────────────────────────
@@ -497,11 +503,62 @@ function renderGenList() {
     </div>`).join("");
 }
 
+function startManual() {
+  manualMode = true;
+  $("pageUpload").style.display = "none";
+  $("newBtn").style.display = "block";
+  VIEWS.forEach(v => { statuses[v.id] = "manual"; });
+  showBoard();
+}
+
+function copyPrompt(viewId) {
+  const view = VIEWS.find(v => v.id === viewId);
+  navigator.clipboard.writeText(view.prompt).then(() => {
+    const b = document.getElementById("cp-" + viewId);
+    if (b) { b.textContent = "✓ copied"; setTimeout(() => { b.textContent = "copy prompt"; }, 1600); }
+  });
+}
+
+function uploadCell(viewId) {
+  const inp = document.createElement("input");
+  inp.type = "file"; inp.accept = "image/*";
+  inp.onchange = e => {
+    const f = e.target.files[0];
+    if (!f) return;
+    const r = new FileReader();
+    r.onload = ev => { images[viewId] = ev.target.result; statuses[viewId] = "done"; showBoard(); };
+    r.readAsDataURL(f);
+  };
+  inp.click();
+}
+
+async function pasteCell(viewId) {
+  try {
+    const items = await navigator.clipboard.read();
+    for (const item of items) {
+      const type = item.types.find(t => t.startsWith("image/"));
+      if (type) {
+        const blob = await item.getType(type);
+        const r = new FileReader();
+        r.onload = ev => { images[viewId] = ev.target.result; statuses[viewId] = "done"; showBoard(); };
+        r.readAsDataURL(blob);
+        return;
+      }
+    }
+    alert("ไม่พบรูปใน clipboard — copy รูปจาก Gemini ก่อนแล้วลองใหม่");
+  } catch { alert("Browser นี้ไม่รองรับ paste รูป — ใช้ปุ่ม upload แทน"); }
+}
+
 function showBoard() {
   $("pageGen").style.display = "none";
   $("pageBoard").style.display = "block";
   $("boardSketch").src = sketchDataUrl;
   if (analysis) $("boardSub").textContent = `${analysis.projectType || ""} · ${analysis.style || ""}`;
+  if (manualMode) {
+    $("boardSub").innerHTML = `Manual mode · ใช้ Gemini Pro —
+      <a href="https://gemini.google.com" target="_blank" style="color:#4285f4">เปิด Gemini ↗</a> ·
+      <a href="${sketchDataUrl}" download="sketch.png" style="color:var(--accent)">โหลด sketch ↓</a>`;
+  }
 
   const gridClasses = { perspective:"g-persp", plan:"g-plan", isometric:"g-iso",
     elevation:"g-elev", blowup:"g-blow", typical:"g-typ", materials:"g-mat" };
@@ -509,12 +566,20 @@ function showBoard() {
   $("boardGrid").innerHTML = VIEWS.map(v => `
     <div class="cell ${gridClasses[v.id]} ${["plan","typical","materials"].includes(v.id) ? "wide" : ""}">
       <div class="cell-tag">${v.tag}
+        ${manualMode ? `<button class="retry-link" id="cp-${v.id}" style="color:#4285f4" onclick="copyPrompt('${v.id}')">copy prompt</button>` : ""}
         ${statuses[v.id] === "error" ? `<button class="retry-link" onclick="retryView('${v.id}')">⟳ retry</button>` : ""}
       </div>
       <div class="cell-img" id="img-${v.id}">
         ${images[v.id]
           ? `<img src="${images[v.id]}"><a class="dl" href="${images[v.id]}" download="${v.id}.png">↓ save</a>`
-          : `<div style="font-size:10px;color:#bbb;padding:16px;text-align:center">${(errors[v.id]||"failed").slice(0,80)}<br><span style="color:var(--accent)">tap ⟳ retry above</span></div>`}
+          : manualMode
+            ? `<div style="text-align:center;padding:14px">
+                 <div style="font-size:10px;color:#aaa;line-height:1.7;margin-bottom:10px">
+                   1. copy prompt ด้านบน<br>2. วางใน Gemini + แนบ sketch<br>3. save รูปแล้วกดปุ่มล่าง</div>
+                 <button class="btn" style="font-size:10px;padding:7px 14px" onclick="uploadCell('${v.id}')">＋ ใส่รูป</button>
+                 <button class="btn btn-ghost" style="font-size:10px;padding:7px 12px;margin-left:6px" onclick="pasteCell('${v.id}')">📋 paste</button>
+               </div>`
+            : `<div style="font-size:10px;color:#bbb;padding:16px;text-align:center">${(errors[v.id]||"failed").slice(0,80)}<br><span style="color:var(--accent)">tap ⟳ retry above</span></div>`}
       </div>
       <div class="cell-lbl">${v.label}</div>
     </div>`).join("") + `
